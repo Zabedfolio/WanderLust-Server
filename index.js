@@ -41,28 +41,24 @@ async function run() {
         const destinationCollection = db.collection('destinations');
         const bookingCollection = db.collection('bookings');
 
-        // ✅ PUBLIC - anyone can view destinations list
         app.get('/destination', async (req, res) => {
             const result = await destinationCollection.find().toArray();
             res.json(result);
         });
 
-        // 🔒 PROTECTED - only logged in users can add
-        app.post('/destination', verifyToken, async (req, res) => {
+        app.post('/destination', async (req, res) => {
             const destinationData = req.body;
             const result = await destinationCollection.insertOne(destinationData);
             res.json(result);
         });
 
-        // 🔒 PROTECTED - only logged in users can view details
-        app.get('/destination/:id', verifyToken, async (req, res) => {
+        app.get('/destination/:id', async (req, res) => {
             const { id } = req.params;
             const result = await destinationCollection.findOne({ _id: new ObjectId(id) });
             res.json(result);
         });
 
-        // 🔒 PROTECTED - only logged in users can edit
-        app.patch('/destination/:id', verifyToken, async (req, res) => {
+        app.patch('/destination/:id', async (req, res) => {
             const { id } = req.params;
             const updatedData = req.body;
             const result = await destinationCollection.updateOne(
@@ -72,28 +68,24 @@ async function run() {
             res.json(result);
         });
 
-        // 🔒 PROTECTED - only logged in users can delete
-        app.delete('/destination/:id', verifyToken, async (req, res) => {
+        app.delete('/destination/:id', async (req, res) => {
             const { id } = req.params;
             const result = await destinationCollection.deleteOne({ _id: new ObjectId(id) });
             res.json(result);
         });
 
-        // 🔒 PROTECTED - only logged in users can view their bookings
         app.get('/booking/:userId', verifyToken, async (req, res) => {
             const { userId } = req.params;
             const result = await bookingCollection.find({ userId: userId }).toArray();
             res.json(result);
         });
 
-        // 🔒 PROTECTED - only logged in users can book
         app.post('/booking', verifyToken, async (req, res) => {
             const bookingData = req.body;
             const result = await bookingCollection.insertOne(bookingData);
             res.json(result);
         });
 
-        // 🔒 PROTECTED - only logged in users can cancel
         app.delete('/booking/:bookingId', verifyToken, async (req, res) => {
             const { bookingId } = req.params;
             const result = await bookingCollection.deleteOne({ _id: new ObjectId(bookingId) });
@@ -106,7 +98,7 @@ async function run() {
 
         console.log("Connected to MongoDB!");
 
-        app.listen(PORT, () => {
+        app.listen(PORT, () => {  // ← moved INSIDE run()
             console.log(`Server is running on port ${PORT}`);
         });
 
