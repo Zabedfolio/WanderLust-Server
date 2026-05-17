@@ -74,7 +74,7 @@ async function run() {
             res.json(result);
         });
 
-        app.get('/booking/:userId', verifyToken, async (req, res) => {  // ← added verifyToken
+        app.get('/booking/:userId', verifyToken, async (req, res) => {
             const { userId } = req.params;
             const result = await bookingCollection.find({ userId: userId }).toArray();
             res.json(result);
@@ -92,17 +92,20 @@ async function run() {
             res.json(result);
         });
 
+        app.get('/', (req, res) => {
+            res.send("Server is running");
+        });
+
         console.log("Connected to MongoDB!");
-    } finally {
-        // await client.close();
+
+        app.listen(PORT, () => {  // ← moved INSIDE run()
+            console.log(`Server is running on port ${PORT}`);
+        });
+
+    } catch (err) {
+        console.error("Failed to connect to MongoDB:", err);
+        process.exit(1);
     }
 }
-run().catch(console.dir);
 
-app.get('/', (req, res) => {
-    res.send("Server is running");
-});
-
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
+run();
