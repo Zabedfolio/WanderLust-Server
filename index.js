@@ -2,6 +2,7 @@ const express = require('express');
 const dotenv = require('dotenv')
 const cors = require('cors')
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { createRemoteJWKSet, jwtVerify } = require('jose-cjs');
 const app = express();
 
 dotenv.config()
@@ -19,7 +20,11 @@ const client = new MongoClient(uri, {
     }
 });
 
-const verifyToken = (req,res,next)=>{
+const JWKS = createRemoteJWKSet(
+    new URL("http://localhost:3001/api/auth/jwks")
+)
+
+const verifyToken = async(req,res,next)=>{
             const authHeader = req?.headers.authorization
             if(!authHeader){
                 return res.status(401).json({message: "Unauthorized"})
@@ -29,9 +34,20 @@ const verifyToken = (req,res,next)=>{
             if(!token){
                 return res.status(401).json({message: "Unauthorized"})
             }
-            console.log(token)
+            // console.log(token)
+
+            try {
+                const {payload} = await jwtVerify(token,JWKS)
+                 next()
+            } catch (error) {
+                return res.status(403).json({message: "Forbidden"})
+            }
+
+            
             // if(header === 'logged in'){
-            next()
+           
+
+
             // } else{
                 // res.status(401).json({message: "Unauthorized"})
             // }
@@ -87,7 +103,7 @@ async function run() {
             res.json(result)
         })
 
-        app.post('/booking', async(req,res)=>{
+        app.post('/booking', verifyToken, async(req,res)=>{
             const bookingData = req.body;
             const result = await bookingCollection.insertOne(bookingData);
 
@@ -95,7 +111,7 @@ async function run() {
             res.json(result);
         })
 
-        app.delete('/booking/:bookingId', async(req,res)=>{
+        app.delete('/booking/:bookingId', verifyToken, async(req,res)=>{
             const {bookingId} = req.params;
             const result = await bookingCollection.deleteOne({_id: new ObjectId(bookingId)})
             res.json(result)
