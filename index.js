@@ -98,9 +98,12 @@ async function run() {
 
         console.log("Connected to MongoDB!");
 
-        app.listen(PORT, () => {  // ← moved INSIDE run()
-            console.log(`Server is running on port ${PORT}`);
-        });
+        // ← only listen locally, not on Vercel
+        if (process.env.NODE_ENV !== 'production') {
+            app.listen(PORT, () => {
+                console.log(`Server is running on port ${PORT}`);
+            });
+        }
 
     } catch (err) {
         console.error("Failed to connect to MongoDB:", err);
@@ -109,3 +112,5 @@ async function run() {
 }
 
 run();
+
+module.exports = app; // ← added for Vercel
