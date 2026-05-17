@@ -19,6 +19,24 @@ const client = new MongoClient(uri, {
     }
 });
 
+const verifyToken = (req,res,next)=>{
+            const authHeader = req?.headers.authorization
+            if(!authHeader){
+                return res.status(401).json({message: "Unauthorized"})
+            }
+            const token = authHeader.split(" ")[1]
+
+            if(!token){
+                return res.status(401).json({message: "Unauthorized"})
+            }
+            console.log(token)
+            // if(header === 'logged in'){
+            next()
+            // } else{
+                // res.status(401).json({message: "Unauthorized"})
+            // }
+        }
+
 async function run() {
     try {
         await client.connect();
@@ -39,9 +57,10 @@ async function run() {
             res.json(result);
         })
 
-        app.get('/destination/:id', async(req,res)=>{
+        app.get('/destination/:id', verifyToken,  async(req,res)=>{
             const {id} = req.params;
             const result = await destinationCollection.findOne({_id: new ObjectId(id)});
+
             res.json(result);
         })
 
