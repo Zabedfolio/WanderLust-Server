@@ -8,13 +8,7 @@ dotenv.config();
 const uri = process.env.MONGODB_URI;
 const PORT = process.env.PORT || 5000;
 
-app.use(cors({
-    origin: [
-        'http://localhost:3000',
-        'https://wander-lust-zabedfolio.vercel.app'
-    ],
-    credentials: true
-}));
+app.use(cors());
 app.use(express.json());
 
 const client = new MongoClient(uri, {
