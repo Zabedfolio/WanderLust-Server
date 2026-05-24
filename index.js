@@ -2,109 +2,120 @@ const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-const app = express();
+const jwt = require('jsonwebtoken'); // npm install jsonwebtoken
 
 dotenv.config();
-const uri = process.env.MONGODB_URI;
+
+const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
 
-const client = new MongoClient(uri, {
-    serverApi: {
-        version: ServerApiVersion.v1,
-        strict: true,
-        deprecationErrors: true,
-    }
-});
+// --- Cached connection for serverless environments ---
+let cachedClient = null;
 
+async function getClient() {
+    if (cachedClient) return cachedClient;
+    const client = new MongoClient(process.env.MONGODB_URI, {
+        serverApi: {
+            version: ServerApiVersion.v1,
+            strict: true,
+            deprecationErrors: true,
+        }
+    });
+    await client.connect();
+    cachedClient = client;
+    return client;
+}
+
+// --- Actual JWT verification ---
 const verifyToken = (req, res, next) => {
-    const authHeader = req?.headers.authorization;
+    const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ message: "Unauthorized" });
+
     const token = authHeader.split(" ")[1];
     if (!token) return res.status(401).json({ message: "Unauthorized" });
-    next();
-}
 
-async function run() {
     try {
-        await client.connect();
-
-        const db = client.db('wanderlust');
-        const destinationCollection = db.collection('destinations');
-        const bookingCollection = db.collection('bookings');
-
-        app.get('/destination', async (req, res) => {
-            const result = await destinationCollection.find().toArray();
-            res.json(result);
-        });
-
-        app.post('/destination', async (req, res) => {
-            const destinationData = req.body;
-            const result = await destinationCollection.insertOne(destinationData);
-            res.json(result);
-        });
-
-        app.get('/destination/:id', async (req, res) => {
-            const { id } = req.params;
-            const result = await destinationCollection.findOne({ _id: new ObjectId(id) });
-            res.json(result);
-        });
-
-        app.patch('/destination/:id', async (req, res) => {
-            const { id } = req.params;
-            const updatedData = req.body;
-            const result = await destinationCollection.updateOne(
-                { _id: new ObjectId(id) },
-                { $set: updatedData }
-            );
-            res.json(result);
-        });
-
-        app.delete('/destination/:id', async (req, res) => {
-            const { id } = req.params;
-            const result = await destinationCollection.deleteOne({ _id: new ObjectId(id) });
-            res.json(result);
-        });
-
-        app.get('/booking/:userId', verifyToken, async (req, res) => {
-            const { userId } = req.params;
-            const result = await bookingCollection.find({ userId: userId }).toArray();
-            res.json(result);
-        });
-
-        app.post('/booking', verifyToken, async (req, res) => {
-            const bookingData = req.body;
-            const result = await bookingCollection.insertOne(bookingData);
-            res.json(result);
-        });
-
-        app.delete('/booking/:bookingId', verifyToken, async (req, res) => {
-            const { bookingId } = req.params;
-            const result = await bookingCollection.deleteOne({ _id: new ObjectId(bookingId) });
-            res.json(result);
-        });
-
-        app.get('/', (req, res) => {
-            res.send("Server is running");
-        });
-
-        console.log("Connected to MongoDB!");
-
-        // ← only listen locally, not on Vercel
-        if (process.env.NODE_ENV !== 'production') {
-            app.listen(PORT, () => {
-                console.log(`Server is running on port ${PORT}`);
-            });
-        }
-
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        req.user = decoded; // attach user payload for use in routes
+        next();
     } catch (err) {
-        console.error("Failed to connect to MongoDB:", err);
-        process.exit(1);
+        return res.status(403).json({ message: "Forbidden: invalid or expired token" });
     }
+};
+
+// --- Async wrapper to catch errors in route handlers ---
+const asyncHandler = (fn) => (req, res, next) =>
+    Promise.resolve(fn(req, res, next)).catch(next);
+
+// --- Routes ---
+app.get('/', (req, res) => res.send("Server is running"));
+
+app.get('/destination', asyncHandler(async (req, res) => {
+    const client = await getClient();
+    const result = await client.db('wanderlust').collection('destinations').find().toArray();
+    res.json(result);
+}));
+
+app.post('/destination', asyncHandler(async (req, res) => {
+    const client = await getClient();
+    const result = await client.db('wanderlust').collection('destinations').insertOne(req.body);
+    res.json(result);
+}));
+
+app.get('/destination/:id', asyncHandler(async (req, res) => {
+    const client = await getClient();
+    const result = await client.db('wanderlust').collection('destinations')
+        .findOne({ _id: new ObjectId(req.params.id) });
+    if (!result) return res.status(404).json({ message: "Destination not found" });
+    res.json(result);
+}));
+
+app.patch('/destination/:id', asyncHandler(async (req, res) => {
+    const client = await getClient();
+    const result = await client.db('wanderlust').collection('destinations')
+        .updateOne({ _id: new ObjectId(req.params.id) }, { $set: req.body });
+    res.json(result);
+}));
+
+app.delete('/destination/:id', asyncHandler(async (req, res) => {
+    const client = await getClient();
+    const result = await client.db('wanderlust').collection('destinations')
+        .deleteOne({ _id: new ObjectId(req.params.id) });
+    res.json(result);
+}));
+
+app.get('/booking/:userId', verifyToken, asyncHandler(async (req, res) => {
+    const client = await getClient();
+    const result = await client.db('wanderlust').collection('bookings')
+        .find({ userId: req.params.userId }).toArray();
+    res.json(result);
+}));
+
+app.post('/booking', verifyToken, asyncHandler(async (req, res) => {
+    const client = await getClient();
+    const result = await client.db('wanderlust').collection('bookings').insertOne(req.body);
+    res.json(result);
+}));
+
+app.delete('/booking/:bookingId', verifyToken, asyncHandler(async (req, res) => {
+    const client = await getClient();
+    const result = await client.db('wanderlust').collection('bookings')
+        .deleteOne({ _id: new ObjectId(req.params.bookingId) });
+    res.json(result);
+}));
+
+// --- Global error handler ---
+app.use((err, req, res, next) => {
+    console.error(err);
+    res.status(500).json({ message: "Internal server error", error: err.message });
+});
+
+// --- Local dev only ---
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
 
-run();
-
-module.exports = app; // ← added for Vercel
+module.exports = app;
