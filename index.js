@@ -46,15 +46,20 @@ const verifyToken = async (req, res, next) => {
     if (!token) return res.status(401).json({ message: "Unauthorized" });
 
     try {
-        const { payload } = await jwtVerify(token, JWKS); // ← no issuer/audience
+        const { payload } = await jwtVerify(token, JWKS);
         req.user = payload;
         next();
     } catch (err) {
-        console.error("JWT error:", err.message); // ← helpful for debugging
-        return res.status(403).json({ message: "Forbidden: invalid or expired token" });
+        console.error("JWT error code:", err.code);
+        console.error("JWT error message:", err.message);
+        // Temporarily return the error details so you can see it
+        return res.status(403).json({ 
+            message: "Forbidden", 
+            error: err.message,
+            code: err.code
+        });
     }
 };
-
 const asyncHandler = (fn) => (req, res, next) =>
     Promise.resolve(fn(req, res, next)).catch(next);
 
