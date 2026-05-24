@@ -2,14 +2,17 @@ const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-const jwt = require('jsonwebtoken'); // npm install jsonwebtoken
+const { jwtVerify } = require('jose-cjs'); // ← correct import
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+app.use(cors({
+    origin: process.env.CLIENT_URL,
+    credentials: true
+}));
 app.use(express.json());
 
 // --- Cached connection for serverless environments ---
@@ -29,7 +32,7 @@ async function getClient() {
     return client;
 }
 
-// --- Actual JWT verification ---
+// --- JWT verification using jose-cjs ---
 const verifyToken = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ message: "Unauthorized" });
@@ -38,7 +41,8 @@ const verifyToken = async (req, res, next) => {
     if (!token) return res.status(401).json({ message: "Unauthorized" });
 
     try {
-        const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+        // Uses BETTER_AUTH_SECRET since that's what you have in Vercel
+        const secret = new TextEncoder().encode(process.env.BETTER_AUTH_SECRET);
         const { payload } = await jwtVerify(token, secret);
         req.user = payload;
         next();
@@ -47,7 +51,7 @@ const verifyToken = async (req, res, next) => {
     }
 };
 
-// --- Async wrapper to catch errors in route handlers ---
+// --- Async wrapper ---
 const asyncHandler = (fn) => (req, res, next) =>
     Promise.resolve(fn(req, res, next)).catch(next);
 
