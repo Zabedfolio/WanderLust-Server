@@ -30,7 +30,7 @@ async function getClient() {
 }
 
 // --- Actual JWT verification ---
-const verifyToken = (req, res, next) => {
+const verifyToken = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ message: "Unauthorized" });
 
@@ -38,8 +38,9 @@ const verifyToken = (req, res, next) => {
     if (!token) return res.status(401).json({ message: "Unauthorized" });
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded; // attach user payload for use in routes
+        const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+        const { payload } = await jwtVerify(token, secret);
+        req.user = payload;
         next();
     } catch (err) {
         return res.status(403).json({ message: "Forbidden: invalid or expired token" });
