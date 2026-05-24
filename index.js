@@ -2,18 +2,16 @@ const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-const { createRemoteJWKSet, jwtVerify } = require('jose'); // ← use 'jose' not 'jose-cjs'
+const { createRemoteJWKSet, jwtVerify } = require('jose');
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// --- Remove trailing slash from CLIENT_URL ---
 const clientUrl = (process.env.CLIENT_URL || '').replace(/\/$/, '');
 const authOrigin = (process.env.BETTER_AUTH_URL || clientUrl || 'http://localhost:3000').replace(/\/$/, '');
 
-// --- JWKS from your live Next.js app ---
 const JWKS = createRemoteJWKSet(
     new URL('/api/auth/jwks', authOrigin)
 );
@@ -24,7 +22,6 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// --- Cached MongoDB connection ---
 let cachedClient = null;
 
 async function getClient() {
@@ -41,7 +38,6 @@ async function getClient() {
     return client;
 }
 
-// --- JWT verification via JWKS ---
 const verifyToken = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ message: "Unauthorized" });
@@ -50,22 +46,18 @@ const verifyToken = async (req, res, next) => {
     if (!token) return res.status(401).json({ message: "Unauthorized" });
 
     try {
-        const { payload } = await jwtVerify(token, JWKS, {
-            issuer: authOrigin,
-            audience: authOrigin,
-        });
+        const { payload } = await jwtVerify(token, JWKS); // ← no issuer/audience
         req.user = payload;
         next();
     } catch (err) {
+        console.error("JWT error:", err.message); // ← helpful for debugging
         return res.status(403).json({ message: "Forbidden: invalid or expired token" });
     }
 };
 
-// --- Async wrapper ---
 const asyncHandler = (fn) => (req, res, next) =>
     Promise.resolve(fn(req, res, next)).catch(next);
 
-// --- Routes ---
 app.get('/', (req, res) => res.send("Server is running"));
 
 app.get('/destination', asyncHandler(async (req, res) => {
@@ -122,13 +114,11 @@ app.delete('/booking/:bookingId', verifyToken, asyncHandler(async (req, res) => 
     res.json(result);
 }));
 
-// --- Global error handler ---
 app.use((err, req, res, next) => {
     console.error(err);
     res.status(500).json({ message: "Internal server error", error: err.message });
 });
 
-// --- Local dev only ---
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
