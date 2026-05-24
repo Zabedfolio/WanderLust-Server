@@ -2,20 +2,29 @@ const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-const { jwtVerify } = require('jose-cjs'); // ← correct import
+const { createRemoteJWKSet, jwtVerify } = require('jose'); // ← use 'jose' not 'jose-cjs'
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// --- Remove trailing slash from CLIENT_URL ---
+const clientUrl = (process.env.CLIENT_URL || '').replace(/\/$/, '');
+const authOrigin = (process.env.BETTER_AUTH_URL || clientUrl || 'http://localhost:3000').replace(/\/$/, '');
+
+// --- JWKS from your live Next.js app ---
+const JWKS = createRemoteJWKSet(
+    new URL('/api/auth/jwks', authOrigin)
+);
+
 app.use(cors({
-    origin: process.env.CLIENT_URL,
+    origin: clientUrl,
     credentials: true
 }));
 app.use(express.json());
 
-// --- Cached connection for serverless environments ---
+// --- Cached MongoDB connection ---
 let cachedClient = null;
 
 async function getClient() {
@@ -32,7 +41,7 @@ async function getClient() {
     return client;
 }
 
-// --- JWT verification using jose-cjs ---
+// --- JWT verification via JWKS ---
 const verifyToken = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ message: "Unauthorized" });
@@ -41,9 +50,10 @@ const verifyToken = async (req, res, next) => {
     if (!token) return res.status(401).json({ message: "Unauthorized" });
 
     try {
-        // Uses BETTER_AUTH_SECRET since that's what you have in Vercel
-        const secret = new TextEncoder().encode(process.env.BETTER_AUTH_SECRET);
-        const { payload } = await jwtVerify(token, secret);
+        const { payload } = await jwtVerify(token, JWKS, {
+            issuer: authOrigin,
+            audience: authOrigin,
+        });
         req.user = payload;
         next();
     } catch (err) {
